@@ -1,0 +1,9 @@
+# Temp folder
+/tmp
+
+# Go build folders
+/bin
+/vendor
+
+# Credentials
+credentials.yml

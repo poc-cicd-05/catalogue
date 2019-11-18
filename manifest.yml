@@ -1,0 +1,11 @@
+---
+applications:
+- name: APPNAME
+  memory: 64M
+  instances: 1
+  buildpack: https://github.com/cloudfoundry/go-buildpack.git
+  env:
+    GOPACKAGENAME: APPNAME
+    APP_PORT: 8080
+    DB_DSN: "catalogue_user:default_password@tcp(sockshop-catalogue-db.ckbkxcwrvff7.eu-west-1.rds.amazonaws.com:3306)/catalogue_db"
+    DT_CUSTOM_PROP: DEPLOYMENT_GRP_NME=DTGRP DEPLOYMENT_APP_NME=NODEID DEPLOYMENT_COLOR=APPCOLOR

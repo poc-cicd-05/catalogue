@@ -1,0 +1,508 @@
+---
+groups:
+- name: build-pipeline
+  jobs:
+  - go-build
+  - deploy-to-dev
+  - run-health-check
+  - run-functional-check
+  - deploy-to-staging
+  # - run-e2e-test
+  # - validate-test-result
+  - deploy-to-production
+  - promote-new-version
+  # - upload-git-release
+
+- name: init-dynatrace
+  jobs: 
+  - init-dynatrace-catalogue
+
+- name: performance
+  jobs:
+  - run-performance-check
+  - validate-performance-check
+
+resource_types:
+- name: dynatrace-resource
+  type: docker-image
+  source:
+    repository: mvilliger/dynatrace-resource
+
+resources:
+
+#GitHub Release Repository
+# - name: catalogue-release
+#   type: github-release
+#   source:
+#     owner: acm-workshop-concourse
+#     repository: catalogue
+#     access_token: ((github-access-token))
+
+# GitHub Repositories
+- name: git-pipeline
+  type: git
+  source:
+    branch: master
+    uri: https://github.com/((pipeline-tasks))/cf-deploy-sockshop.git
+
+- name: git-catalogue
+  type: git
+  source:
+    branch: master
+    uri: https://github.com/((source-code))/catalogue.git
+
+- name: dynatrace
+  type: dynatrace-resource
+  source:
+    apitoken: ((dt_api_token))
+    tenanthost: ((dt_tenant_host))
+
+#- name: catalogue-image
+#  type: docker-image
+#  source:
+#    repository: ((docker-hub-username))/catalogue
+#    username: ((docker-hub-username))
+#    password: ((docker-hub-password))
+
+- name: catalogue-release-bucket
+  type: s3
+  source:
+    region_name: eu-west-1
+    regexp: catalogue/catalogue-(.*)
+    bucket: ((s3-bucket))
+    access_key_id: ((s3-access-key-id))
+    secret_access_key: ((s3-secret-access-key))
+
+- name: version
+  type: semver
+  source:
+    driver: git
+    uri: https://github.com/((source-code))/catalogue.git
+    branch: master
+    file: version
+
+# PCF Environments
+
+- name: pcf-dev
+  type: cf
+  source:
+    api: ((pcf-dev-api))
+    username: ((pcf-username))
+    password: ((pcf-password))
+    organization: ((pcf-dev-organization))
+    space: ((pcf-dev-space))
+    skip_cert_check: false
+
+- name: pcf-staging
+  type: cf
+  source:
+    api: ((pcf-staging-api))
+    username: ((pcf-username))
+    password: ((pcf-password))
+    organization: ((pcf-staging-organization))
+    space: ((pcf-staging-space))
+    skip_cert_check: false
+
+- name: pcf-production
+  type: cf
+  source:
+    api: ((pcf-production-api))
+    username: ((pcf-username))
+    password: ((pcf-password))
+    organization: ((pcf-production-organization))
+    space: ((pcf-production-space))
+    skip_cert_check: false
+
+jobs:
+
+# Initialize Dynatrace Custom Device
+
+- name: init-dynatrace-catalogue
+  public: true
+  plan:
+  - aggregate:
+    - get: git-pipeline
+    - get: git-catalogue 
+  - task: init-dynatrace-task
+    file: git-pipeline//ci/tasks/init-dynatrace-task.yml
+    params: 
+      apitoken: ((dt_api_token))
+      tenanthost: ((dt_tenant_host))
+      APP_REPO: git-catalogue
+
+# CATALOGUE
+
+- name: go-build
+  plan:
+  - get: git-catalogue
+    trigger: true
+  - get: version
+    params: { pre: build }
+  - task: build-catalogue-binary
+    config:
+      platform: linux
+      image_resource:
+        type: docker-image
+        source: {repository: golang, tag: 1.8.7} 
+      inputs:
+      - name: git-catalogue
+      - name: version
+      outputs:
+      - name: workspace
+      run:
+        path: /bin/sh
+        args:
+        - -exc
+        - |
+          # output_dir=workspace
+          # rm git-catalogue/Dockerfile
+          # cp git-catalogue/docker/catalogue/Dockerfile "${output_dir}/Dockerfile"
+          # sh git-catalogue/scripts/build.jb.sh
+          # echo "binary to version" > "${output_dir}/catalogue-$(cat version/number).txt"
+          # cp git-catalogue/glide.yaml git-catalogue/build/docker/catalogue/glide.yaml
+          # cp -R git-catalogue/* "${output_dir}/"
+
+          output_dir=workspace
+          export WORKDIR=$PWD
+          
+          go version
+
+          cd workspace
+          export GOPATH=$PWD
+          mkdir -p src/github.com/dynatrace-sockshop/catalogue/
+          cp -R ../git-catalogue/* src/github.com/dynatrace-sockshop/catalogue/.
+          cd src/github.com/dynatrace-sockshop/catalogue/
+          
+          apt-get update
+          apt-get install git
+          go get -v github.com/Masterminds/glide
+          cd $GOPATH/src/github.com/Masterminds/glide
+          make build
+          export PATH=$PATH:$GOPATH/src/github.com/Masterminds/glide
+          
+          cd $GOPATH/src/github.com/dynatrace-sockshop/catalogue/
+          glide install && CGO_ENABLED=0 go build -a -installsuffix cgo -o catalogue main.go
+          
+          cd $WORKDIR
+          cp $GOPATH/src/github.com/dynatrace-sockshop/catalogue/catalogue "${output_dir}/"
+          mv ${output_dir}/catalogue ${output_dir}/catalogue-$(cat version/number)
+  - put: catalogue-release-bucket
+    params: 
+      file: workspace/catalogue-*
+
+- name: deploy-to-dev
+  serial: true
+  public: true
+  plan:
+  - get: git-catalogue
+    trigger: true
+    passed:
+      - go-build
+  - get: catalogue-release-bucket
+    passed:
+      - go-build
+  - get: git-pipeline
+    trigger: false      
+  - task: prepare-app-manifest
+    file: git-pipeline//ci/tasks/app-manifest-prep.yml
+    params:
+      STAGE: Dev
+      PCF_APP_SUFFIX: ((pcf-dev-catalogue-suffix)) 
+      APP_REPO: git-catalogue           
+  - put: pcf-dev
+    params:
+      path: git-catalogue
+      manifest: app-manifest-output/manifest.yml
+  - put: dynatrace
+    params:
+      monspecserviceenvironment: catalogue/Dev
+      pipelinetaskname: deploy-to-dev
+      deployversion: v1.0
+      APP_REPO: git-catalogue
+
+- name: run-health-check
+  serial: true
+  public: true
+  plan:
+  - aggregate:
+    - get: git-catalogue
+      trigger: true
+      passed:
+        - deploy-to-dev
+    - get: git-pipeline
+      trigger: false 
+  - task: run-health-check
+    file: git-pipeline//ci/tasks/jmeter-test.yml
+    params:
+      APP_REPO: git-catalogue
+      PRODUCTION: false
+      SCRIPT_NAME: jmeter/basiccheck.jmx
+      RESULT_DIR: HealthCheck
+      PCF_APP_SUFFIX: ((pcf-dev-catalogue-suffix))
+      PCF_APP_DOMAIN: ((pcf-dev-app-domain))
+      CHECK_PATH: /health
+      SERVER_PORT: 80
+      VU_COUNT: 1
+      LOOP_COUNT: 1
+      DT_LTN: HealthCheck
+      FUNC_VALIDATION: true
+      THINK_TIME: 0
+
+- name: run-functional-check
+  serial: true
+  public: true
+  plan:
+  - aggregate:
+    - get: git-catalogue
+      trigger: true
+      passed:
+        - run-health-check
+    - get: git-pipeline
+  - task: run-functional-check
+    file: git-pipeline//ci/tasks/jmeter-test.yml
+    params:
+      APP_REPO: git-catalogue
+      PRODUCTION: false
+      SCRIPT_NAME: jmeter/catalogue.jmx
+      RESULT_DIR: FuncCheck
+      PCF_APP_SUFFIX: ((pcf-dev-catalogue-suffix))
+      PCF_APP_DOMAIN: ((pcf-dev-app-domain))
+      CHECK_PATH: /health
+      SERVER_PORT: 80
+      VU_COUNT: 1
+      LOOP_COUNT: 1
+      DT_LTN: FuncCheck
+      FUNC_VALIDATION: true
+      AVG_RT_VALIDATION: 3000
+      THINK_TIME: 0
+
+- name: deploy-to-staging
+  serial: true
+  public: true
+  plan:
+  - get: git-catalogue
+    trigger: true
+    passed:
+      - run-functional-check
+  - get: catalogue-release-bucket
+    passed:
+      - go-build
+  - get: git-pipeline
+    trigger: false      
+  - task: prepare-app-manifest
+    file: git-pipeline//ci/tasks/app-manifest-prep.yml
+    params:
+      STAGE: Staging
+      PCF_APP_SUFFIX: ((pcf-staging-catalogue-suffix)) 
+      APP_REPO: git-catalogue               
+  - put: pcf-staging
+    params:
+      path: git-catalogue
+      manifest: app-manifest-output/manifest.yml 
+  - put: dynatrace
+    params:
+      monspecserviceenvironment: catalogue/Staging
+      pipelinetaskname: deploy-to-staging
+      deployversion: v1.0 
+      APP_REPO: git-catalogue 
+
+# - name: run-e2e-test
+#   serial: true
+#   public: true
+#   plan:
+#   - aggregate:
+#     - get: git-catalogue
+#       trigger: true
+#       passed:
+#        - deploy-to-staging
+#     - get: git-pipeline
+#   - task: run-e2e-check
+#     file: git-pipeline//ci/tasks/load-tests.yml
+#     params:
+#       APP_REPO: git-pipeline
+#       FUNC_VALIDATION: yes
+#       PRODUCTION: true
+#       SCRIPT_NAME: /ci/jmeterfront-end_e2e_load.jmx
+#       PCF_APP_SUFFIX: ((pcf-staging-catalogue-suffix))
+#       PCF_APP_DOMAIN: ((pcf-staging-app-domain))
+#       DT_LTN: e2eCheck
+#       VUCount: 5
+#       LoopCount: 20 
+#   - task: push-dynatrace-monspec-data
+#     file: git-pipeline//ci/tasks/push-dynatrace-monspec-data.yml
+#     params: 
+#       monspecserviceenvironment: catalogue/Production-$NEXT_APP_COLOR
+#       apitoken: ((apitoken))
+#       tenanthost: ((tenanthost))
+#       APP_REPO: git-catalogue    
+
+# - name: validate-test-result
+#   serial: true
+#   public: true
+#   plan:
+#   - get: git-catalogue
+#     trigger: true
+#     passed:
+#       - execute-catalogue-load-tests
+#   - get: git-pipeline
+#     trigger: false      
+#   - task: get-current-app-color
+#     file: git-pipeline//ci/tasks/current-app-get-info.yml
+#     params:
+#       PCF_APP_SUFFIX: ((pcf-prod-catalogue-suffix))
+#       PCF_API: ((pcf-prod-api))
+#       PCF_ORG: ((pcf-prod-organization))
+#       PCF_USER: ((pcf-prod-deploy-username))
+#       PCF_PWD: ((pcf-prod-deploy-password))
+#       PCF_SPACE: ((pcf-prod-space))       
+#   - task: validate-via-monspec
+#     file: git-pipeline//ci/tasks/validate-via-monspec.yml
+#     params: 
+#       monspeccomparison: catalogue/Production-$NEXT_APP_COLOR\ToProduction-$CURRENT_APP_COLOR\Last5m
+#       apitoken: ((apitoken))
+#       tenanthost: ((tenanthost))
+#       APP_REPO: git-catalogue     
+
+- name: deploy-to-production
+  serial: true
+  public: true
+  plan:
+  - get: git-catalogue
+    trigger: true
+    passed:
+      - deploy-to-staging
+  - get: catalogue-release-bucket
+    passed:
+      - go-build
+  - get: git-pipeline
+    trigger: false      
+  - task: get-current-app-color
+    file: git-pipeline//ci/tasks/current-app-get-info.yml
+    params:
+      PCF_APP_SUFFIX: ((pcf-production-catalogue-suffix))
+      PCF_API: ((pcf-production-api))
+      PCF_ORG: ((pcf-production-organization))
+      PCF_SPACE: ((pcf-production-space))  
+      PCF_USER: ((pcf-username))
+      PCF_PWD: ((pcf-password))
+  - task: prepare-app-manifest
+    file: git-pipeline//ci/tasks/app-manifest-prep.yml
+    params:
+      STAGE: Production 
+      PCF_APP_SUFFIX: ((pcf-production-catalogue-suffix)) 
+      APP_REPO: git-catalogue     
+  - put: pcf-production
+    params:
+      path: git-catalogue
+      manifest: app-manifest-output/manifest.yml
+  - put: dynatrace
+    params:
+      monspecserviceenvironment: catalogue/Production
+      pipelinetaskname: deploy-to-production
+      deployversion: v1.0 
+      APP_REPO: git-catalogue 
+
+- name: promote-new-version
+  serial: true
+  public: true
+  plan:
+  - get: git-catalogue
+    trigger: true
+    passed:
+      - deploy-to-production
+  - get: git-pipeline
+    trigger: false      
+  - task: get-current-app-color
+    file: git-pipeline//ci/tasks/current-app-get-info.yml
+    params:
+      PCF_APP_SUFFIX: ((pcf-production-catalogue-suffix))
+      PCF_API: ((pcf-production-api))
+      PCF_ORG: ((pcf-production-organization))
+      PCF_SPACE: ((pcf-production-space))  
+      PCF_USER: ((pcf-username))
+      PCF_PWD: ((pcf-password))
+  - task: switch-app-routes
+    file: git-pipeline//ci/tasks/update-routes.yml
+    params:
+      PCF_APP_SUFFIX: ((pcf-production-catalogue-suffix))
+      PCF_APP_DOMAIN: ((pcf-production-app-domain))
+      PCF_API: ((pcf-production-api))
+      PCF_ORG: ((pcf-production-organization))
+      PCF_SPACE: ((pcf-production-space))
+      PCF_USER: ((pcf-username))
+      PCF_PWD: ((pcf-password))
+
+# - name: upload-catalogue-git-release
+#   public: true
+#   plan:
+#   - aggregate:
+#     - get: git-catalogue
+#       trigger: true
+#       passed: 
+#         - promote-new-version-catalogue
+#     - get: catalogue-release-bucket
+#     - get: git-pipeline
+#     - get: version
+#       params: { pre: build }
+#   - task: create-catalogue-release-info
+#     file: git-pipeline//ci/tasks/prepare-release.yml
+#     params:
+#       APP_NAME: catalogue
+#   - put: catalogue-release
+#     params:
+#       name: prepared-release/name
+#       tag: prepared-release/tag
+#       globs:
+#       - catalogue-release-bucket/catalogue-*
+#  - put: version
+#    params: { file: version/number }    
+
+- name: run-performance-check
+  serial: true
+  public: true
+  plan:
+  - aggregate:
+    - get: git-catalogue
+      trigger: false
+    - get: git-pipeline
+  - task: run-performance-check
+    file: git-pipeline//ci/tasks/jmeter-test.yml
+    params:
+      APP_REPO: git-catalogue
+      PRODUCTION: false
+      SCRIPT_NAME: jmeter/catalogue_load.jmx
+      RESULT_DIR: PerfCheck
+      PCF_APP_SUFFIX: ((pcf-dev-catalogue-suffix))
+      PCF_APP_DOMAIN: ((pcf-dev-app-domain))
+      SERVER_PORT: 80
+      VU_COUNT: 10
+      LOOP_COUNT: 250
+      DT_LTN: FuncCheck
+      FUNC_VALIDATION: false
+      AVG_RT_VALIDATION: 3000
+      THINK_TIME: 0
+  - task: push-dynatrace-monspec-data
+    file: git-pipeline//ci/tasks/push-dynatrace-monspec-data.yml
+    params: 
+      monspecserviceenvironment: catalogue/Dev
+      apitoken: ((dt_api_token))
+      tenanthost: ((dt_tenant_host))
+      APP_REPO: git-catalogue 
+
+- name: validate-performance-check
+  serial: true
+  public: true
+  plan:
+  - get: git-catalogue
+    trigger: true
+    passed:
+      - run-performance-check
+  - get: git-pipeline
+    trigger: false      
+  - task: validate-via-monspec
+    file: git-pipeline//ci/tasks/validate-via-monspec.yml
+    params: 
+      monspeccomparison: catalogue/DevToDevLastHour
+      apitoken: ((dt_api_token))
+      tenanthost: ((dt_tenant_host))
+      APP_REPO: git-catalogue 

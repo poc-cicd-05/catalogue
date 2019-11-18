@@ -1,0 +1,166 @@
+hash: 11912a3cda928ec14b3c58f3c6256e9ca1e30aea2bd0f4eb698c038c6abe3aea
+updated: 2018-09-17T20:47:37.3052805+02:00
+imports:
+- name: github.com/afex/hystrix-go
+  version: 39520ddd07a9d9a071d615f7476798659f5a3b89
+  subpackages:
+  - hystrix
+- name: github.com/apache/thrift
+  version: e0ccbd6e62e14f32d7c5fe0f9cec6eff3259b863
+  subpackages:
+  - lib/go/thrift
+- name: github.com/beorn7/perks
+  version: 4c0e84591b9aa9e6dcfdf3e020114cd81f89d5f9
+  subpackages:
+  - quantile
+- name: github.com/davecgh/go-spew
+  version: 346938d642f2ec3594ed81d874461961cd0faa76
+  subpackages:
+  - spew
+- name: github.com/eapache/go-resiliency
+  version: b86b1ec0dd4209a588dc1285cdd471e73525c0b3
+  subpackages:
+  - breaker
+- name: github.com/eapache/go-xerial-snappy
+  version: bb955e01b9346ac19dc29eb16586c90ded99a98c
+- name: github.com/eapache/queue
+  version: 44cc805cf13205b55f69e14bcb69867d1ae92f98
+- name: github.com/go-kit/kit
+  version: fadad6fffe0466b19df9efd9acde5c9a52df5fa4
+  subpackages:
+  - circuitbreaker
+  - endpoint
+  - log
+  - metrics
+  - metrics/internal/lv
+  - metrics/prometheus
+  - tracing/opentracing
+  - transport/http
+- name: github.com/go-logfmt/logfmt
+  version: d4327190ff838312623b09bfeb50d7c93c8d9c1d
+- name: github.com/go-sql-driver/mysql
+  version: 99ff426eb706cffe92ff3d058e168b278cabf7c7
+- name: github.com/go-stack/stack
+  version: 100eb0c0a9c5b306ca2fb4f165df21d80ada4b82
+- name: github.com/gogo/protobuf
+  version: f9114dace7bd920b32f943b3c73fafbcbab2bf31
+  subpackages:
+  - proto
+- name: github.com/golang/protobuf
+  version: 1f49d83d9aa00e6ce4fc8258c71cc7786aec968a
+  subpackages:
+  - proto
+- name: github.com/golang/snappy
+  version: d9eb7a3d35ec988b8585d4a0068e462c27d28380
+- name: github.com/gorilla/context
+  version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
+- name: github.com/gorilla/mux
+  version: cf79e51a62d8219d52060dfc1b4e810414ba2d15
+- name: github.com/jmoiron/sqlx
+  version: 0dae4fefe7c0e190f7b5a78dac28a1c82cc8d849
+  subpackages:
+  - reflectx
+- name: github.com/klauspost/crc32
+  version: cb6bfca970f6908083f26f39a79009d608efd5cd
+- name: github.com/kr/logfmt
+  version: b84e30acd515aadc4b783ad4ff83aff3299bdfe0
+- name: github.com/matttproud/golang_protobuf_extensions
+  version: c12348ce28de40eed0136aa2b644d0ee0650e56c
+  subpackages:
+  - pbutil
+- name: github.com/opentracing-contrib/go-observer
+  version: a52f2342449246d5bcc273e65cbdcfa5f7d6c63c
+- name: github.com/opentracing/opentracing-go
+  version: bd9c3193394760d98b2fa6ebb2291f0cd1d06a7d
+  subpackages:
+  - ext
+  - log
+- name: github.com/openzipkin-contrib/zipkin-go-opentracing
+  version: b85dc675b16b116a00c351d2c41305bf9ae71293
+  subpackages:
+  - flag
+  - thrift/gen-go/scribe
+  - thrift/gen-go/zipkincore
+  - types
+  - wire
+- name: github.com/openzipkin/zipkin-go-opentracing
+  version: 594640b9ef7e5c994e8d9499359d693c032d738c
+  subpackages:
+  - _thrift/gen-go/scribe
+  - _thrift/gen-go/zipkincore
+  - flag
+  - types
+  - wire
+- name: github.com/pierrec/lz4
+  version: 6b9367c9ff401dbc54fabce3fb8d972e799b702d
+  subpackages:
+  - internal/xxh32
+- name: github.com/prometheus/client_golang
+  version: 5636dc67ae776adf5590da7349e70fbb9559972d
+  subpackages:
+  - prometheus
+  - prometheus/promhttp
+- name: github.com/prometheus/client_model
+  version: fa8ad6fec33561be4280a8f0514318c79d7f6cb6
+  subpackages:
+  - go
+- name: github.com/prometheus/common
+  version: 9a94032291f2192936512bab367bc45e77990d6a
+  subpackages:
+  - expfmt
+  - internal/bitbucket.org/ww/goautoneg
+  - model
+- name: github.com/prometheus/procfs
+  version: 05ee40e3a273f7245e8777337fc7b46e533a9a92
+  subpackages:
+  - internal/util
+  - nfs
+  - xfs
+- name: github.com/rcrowley/go-metrics
+  version: 1f30fe9094a513ce4c700b9a54458bbb0c96996c
+- name: github.com/Shopify/sarama
+  version: 0fb560e5f7fbcaee2f75e3c34174320709f69944
+- name: github.com/Sirupsen/logrus
+  version: 10f801ebc38b33738c9d17d50860f484a0988ff5
+- name: github.com/weaveworks/common
+  version: f94043b3da140c7a735b1f2f286d72d19014b200
+  subpackages:
+  - errors
+  - middleware
+  - user
+- name: github.com/sony/gobreaker
+  version: b2a34562d02c4d5fd6645399c69e00141fb24e5a
+- name: github.com/streadway/handy
+  version: f450267a206e480d863d2a92846a40f6e2896b2a
+  subpackages:
+  - breaker
+- name: golang.org/x/net
+  version: 7394c112eae4dba7e96bfcfe738e6373d61772b4
+  subpackages:
+  - context
+  - context/ctxhttp
+  - http2
+  - http2/hpack
+  - internal/timeseries
+  - lex/httplex
+  - trace
+- name: google.golang.org/appengine
+  version: 03cac3b07182cfb08c0d0c0b6ee72a1ceb151c92
+  subpackages:
+  - cloudsql
+- name: google.golang.org/grpc
+  version: 50955793b0183f9de69bd78e2ec251cf20aab121
+  subpackages:
+  - codes
+  - credentials
+  - grpclog
+  - internal
+  - metadata
+  - naming
+  - peer
+  - stats
+  - tap
+  - transport
+testImports:
+- name: gopkg.in/DATA-DOG/go-sqlmock.v1
+  version: d76b18b42f285b792bf985118980ce9eacea9d10
